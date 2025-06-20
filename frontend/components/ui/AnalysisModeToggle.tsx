@@ -24,14 +24,14 @@ const AnalysisModeToggle: React.FC<AnalysisModeToggleProps> = ({
     {
       id: "llm",
       label: "LLM",
-      description: "Weighted network graph of character interactions.",
+      description: "Weighted network graph of character interactions over a subset of the book.",
       icon: <Brain className="w-5 h-5" />,
       badge: "Recommended",
     },
     {
       id: "spacy",
       label: "spaCy NER",
-      description: "Named Entity Recognition that counts character occurences over whole book",
+      description: "Named Entity Recognition model that counts character occurences over whole book. Innacurate to some extent with differentiating nicknames.",
       icon: <Zap className="w-5 h-5" />,
     },
   ],

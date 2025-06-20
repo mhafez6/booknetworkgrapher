@@ -41,6 +41,7 @@ export interface AnalysisResponseBody {
 type graphNode = { name: string; count: number };
 type Edge = { source: string; target: string; weight: number };
 
+
 export function BookAnalyzer() {
   const [bookId, setBookId] = useState("");
   const [analysisMode, setAnalysisMode] = useState("llm");

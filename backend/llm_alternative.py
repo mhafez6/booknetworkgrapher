@@ -150,25 +150,24 @@ def clean_graph_with_llm(nodes: list[dict], edges: list[dict],
 
     cleaned_nodes = [
         {"name": name, "count": cnt}
-        for name, cnt in merged_counts.most_common()
+        for name, cnt in merged_counts.most_common(50)
     ]
+    top_character_names = {node["name"] for node in cleaned_nodes}
 
     # combine edges
-
     edge_ctr: Counter[tuple[str, str]] = Counter()
     for e in edges:
         a = mapping.get(e["source"], e["source"])
         b = mapping.get(e["target"], e["target"])
-        if a == b:          # ignore self-edges created by merging
-            continue
-        edge_ctr[tuple(sorted((a, b)))] += e["weight"]
+        if a in top_character_names and b in top_character_names and a != b:
+            edge_ctr[tuple(sorted((a, b)))] += e["weight"]
 
     cleaned_edges = [
         {"source": a, "target": b, "weight": w}
         for (a, b), w in sorted(edge_ctr.items(), key=lambda x: x[1], reverse=True)
     ][:200]
 
-    return cleaned_nodes[:50], cleaned_edges
+    return cleaned_nodes, cleaned_edges
 
 
 
@@ -251,6 +250,118 @@ def count_interactions_llm(text: str, book_id: int):
     return {"book_id": book_id, "nodes": nodes, "edges": edges}
 
 
+@app.function(secrets=[secret_apis], timeout=300, scaledown_window=60)
+def spacy_count(raw_text: str, book_id: int = 1324):
+    """
+    takes in a book and returns raw spaCy "PERSON" counts.
+    Using lighter model and optimized processing.
+    also returns pairs of "interactoins"
+    """
+    print(f"\nProcessing {book_id} ")
+    print(f"Input text length: {len(raw_text)} characters")
+    
+
+    import spacy
+    print("\nInitializing spaCy...")
+    # Use smaller CPU-optimized model
+    nlp = spacy.load("en_core_web_sm", disable=["tagger", "parser", "attribute_ruler", "lemmatizer"])
+    nlp.add_pipe("sentencizer")
+
+
+
+    print("Model loaded successfully")
+
+    
+    blocks = [raw_text[i:i+50000] for i in range(0, len(raw_text), 50000)]
+    print(f"\nSplit text into {len(blocks)} blocks")
+    
+    # spans = []
+    t0 = time.perf_counter()
+
+    
+    print("\nProcessing blocks through spaCy pipeline...")
+
+
+
+    # for i, doc in enumerate(nlp.pipe(blocks, batch_size=2048)):
+    #     block_spans = [(ent.text, ent.start_char, ent.end_char)
+    #                   for ent in doc.ents if ent.label_ == "PERSON"]
+    #     spans += block_spans
+    #     print(f"Block {i+1}/{len(blocks)}: Found {len(block_spans)} PERSON entities")
+
+    mention_counter: Counter[str] = Counter()
+    pair_counter = defaultdict(lambda: defaultdict(int))
+    
+    # we create two counters for each of pairs and overall number of mentions
+    
+    from collections import deque
+    window_size = 4  # number of consecutive sentences to consider as context 
+    
+    for i, doc in enumerate(nlp.pipe(blocks, batch_size=2048)):
+        # Keep a small deque for the sliding sentence window inside this block
+        sent_window: deque[set[str]] = deque(maxlen=window_size)
+
+        for ent in doc.ents:
+            if ent.label_ == "PERSON":
+                mention_counter[ent.text.strip()] += 1
+
+        for sent in doc.sents:
+            names = {e.text.strip() for e in sent.ents if e.label_ == "PERSON"}
+            sent_window.append(names)
+
+            # Combine names across the current window
+            union_names: set[str] = set().union(*sent_window)
+
+            if len(union_names) > 1:
+                for n1 in union_names:
+                    for n2 in union_names:
+                        if n1 < n2:
+                            pair_counter[n1][n2] += 1
+                            pair_counter[n2][n1] += 1
+        
+    
+
+
+
+    
+              
+    print(f"\nspaCy NER finished in {time.perf_counter() - t0:.2f}s.")
+
+
+
+    
+    sorted_mentions = sorted(mention_counter.items(), key=lambda x: x[1], reverse=True)
+    # Convert nested defaultdict to list of ((char1, char2), count) tuples
+    pairs = []
+    for char1, interactions in pair_counter.items():
+        for char2, count in interactions.items():
+            if char1 < char2:  # Only add each pair once
+                pairs.append(((char1, char2), count))
+    sorted_pairs = sorted(pairs, key=lambda x: x[1], reverse=True)
+
+    print(f"\nFound {len(sorted_mentions)} unique characters")
+    print(f"\nFound {len(pairs)} unique pairs or interactions")
+    
+    # Display top character interactions
+    print("\nTop 5 character interactions:")
+    for (char1, char2), count in sorted_pairs[:5]:
+        print(f"  - {char1} ↔ {char2}: {count} interactions")
+
+    nodes = [{"name": n, "count": c} for n, c in sorted_mentions]
+    edges = [
+        {"source": a, "target": b, "weight": w}
+        for (a, b), w in sorted_pairs
+    ]
+
+    meta = get_meta_data(book_id)
+    title = meta.get("Title", f"Gutenberg #{book_id}")
+    author = meta.get("Author", "Unknown")
+
+    print("\nCleaning spaCy results with LLM...")
+    nodes, edges = clean_graph_with_llm(nodes, edges, title, author)
+
+    return {"book_id": book_id, "nodes": nodes, "edges": edges}
+
 
 
 
@@ -260,6 +371,9 @@ def analyze_book(req: AnalysisRequest):
     txt = get_text(req.gutenberg_id)
     if isinstance(txt, dict) and "error" in txt:
         return txt
+    
+    if req.analysis_type == "spacy":
+        return spacy_count.remote(txt, req.gutenberg_id)
 
     return count_interactions_llm.remote(txt, req.gutenberg_id)
 
