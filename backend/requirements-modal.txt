@@ -1,12 +1,6 @@
 requests
---extra-index-url https://download.pytorch.org/whl/cu121
-torch==2.2.1+cu121
+python-dotenv==1.0.1
+openai==1.88.0
 spacy==3.7.2
-spacy-transformers==1.2.5
-cupy-cuda12x==13.4.1
-
-# transformer model 
-https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.7.2/en_core_web_trf-3.7.2-py3-none-any.whl
-
-# modal SDK (runtime only)
+fastapi[standard]==0.110.1
 modal==0.62.0

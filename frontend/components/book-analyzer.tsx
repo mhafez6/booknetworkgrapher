@@ -15,9 +15,9 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
 import CharacterNetwork from "./CharacterNetwork";
-import { CharacterEncoding } from "crypto";
+// import BookMetadata from "./BookMetadata";
 
-// ts types mirroring modal 
+// ts types mirroring modal
 
 interface AnalysisRequestBody {
   gutenberg_id: number;
@@ -27,13 +27,13 @@ interface AnalysisRequestBody {
 interface AnalysisResponseBody {
   book_id: number;
   characters: [string, number][];
-  error?: string;          
+  error?: string;
 }
 
-type Character = { name: string; count: string}
+type Character = { name: string; count: number };
 
-// --- -- - - -- - - - - - - - 
-// react stuff 
+// --- -- - - -- - - - - - - -
+// react stuff
 
 export function BookAnalyzer() {
   const [bookId, setBookId] = useState("");
@@ -41,27 +41,24 @@ export function BookAnalyzer() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showResults, setShowResults] = useState(false);
-  const [characters, setCharacters] = useState<Character[]>(null);
-
-
+  const [characters, setCharacters] = useState<Character[]>([]);
+  const [showAll, setShowAll] = useState(false);
 
   const handleAnalyze = async () => {
-
-    if (!bookId.trim()) return 
+    if (!bookId.trim()) return;
 
     setIsLoading(true);
     setError(null);
     setShowResults(false);
 
     try {
-      
       const body: AnalysisRequestBody = {
         gutenberg_id: parseInt(bookId),
-        analysis_type: analysisMode
-      }
+        analysis_type: analysisMode,
+      };
 
       const res = await fetch(
-        process.env.NEXT_PUBLIC_MODAL_ENDPOINT ?? 
+        process.env.NEXT_PUBLIC_MODAL_ENDPOINT ??
           "https://mhafez6--book-ner-analyze-book.modal.run",
         {
           method: "POST",
@@ -70,26 +67,25 @@ export function BookAnalyzer() {
         }
       );
 
-      const data: AnalysisResponseBody = await res.json()
+      const data: AnalysisResponseBody = await res.json();
 
-      if (!res.ok || data.error){
-        throw new Error(data.error ?? `HTTP ${res.status}`)
+      if (!res.ok || data.error) {
+        throw new Error(data.error ?? `HTTP ${res.status}`);
       }
 
-      const updatedData: Character[] = data.characters.map(
-        ([name , count]) => ({name, count})
-      )
+      const updatedData: Character[] = data.characters.map(([name, count]) => ({
+        name,
+        count,
+      }));
 
-      setCharacters(updatedData)
-      setShowResults(true)
-
+      setCharacters(updatedData);
+      setShowResults(true);
     } catch (error) {
-      setError((error as Error).message)
-    } finally{
-      setIsLoading(false)
+      setError((error as Error).message);
+    } finally {
+      setIsLoading(false);
     }
 
-    
     setShowResults(true);
     setIsLoading(false);
   };
@@ -166,20 +162,35 @@ export function BookAnalyzer() {
               </CardHeader>
               <CardContent>
                 <ul className="space-y-2">
-                  {characters.map((char) => (
-                    <li
-                      key={char.name}
-                      className="flex items-center justify-between p-2 rounded-md hover:bg-muted"
-                    >
-                      <span className="font-medium">{char.name}</span>
-                      <div className="flex items-center gap-4">
-                        <Badge variant="secondary">
-                          Mentioned {char.count} times
-                        </Badge>
-                      </div>
-                    </li>
-                  ))}
+                  {(showAll ? characters : characters.slice(0, 5)).map(
+                    (char) => (
+                      <li
+                        key={char.name}
+                        className="flex items-center justify-between p-2 rounded-md hover:bg-muted"
+                      >
+                        <span className="font-medium">{char.name}</span>
+                        <div className="flex items-center gap-4">
+                          <Badge variant="secondary">
+                            Mentioned {char.count} times
+                          </Badge>
+                        </div>
+                      </li>
+                    )
+                  )}
                 </ul>
+                {characters.length > 5 && (
+                  <div className="mt-4 text-center">
+                    <Button
+                      variant="ghost"
+                      onClick={() => setShowAll(!showAll)}
+                      className="text-sm"
+                    >
+                      {showAll
+                        ? "Show Top 5"
+                        : `Show All (${characters.length})`}
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
             <Card>
@@ -190,7 +201,7 @@ export function BookAnalyzer() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <CharacterNetwork  />
+                <CharacterNetwork />
               </CardContent>
             </Card>
           </>
@@ -203,6 +214,7 @@ export function BookAnalyzer() {
             </CardContent>
           </Card>
         )}
+        {/* {showResults && <BookMetadata bookId={Number(bookId)} />} */}
       </div>
     </div>
   );

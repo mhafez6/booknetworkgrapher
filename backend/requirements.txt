@@ -1,11 +1,13 @@
 requests
+python-dotenv==1.0.1
+openai==1.88.0
 
-torch==2.2.1
+# Add FastAPI for web endpoint functions
+fastapi[standard]==0.110.1
+
+# spacy for local development/testing
 spacy==3.7.2
-spacy-transformers==1.2.5
-
-# large English transformer model (hosted on spaCy's S3)
-https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.7.2/en_core_web_trf-3.7.2-py3-none-any.whl
+en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.0/en_core_web_sm-3.7.0-py3-none-any.whl
 
 # modal SDK (runtime only)
 modal==0.62.0
