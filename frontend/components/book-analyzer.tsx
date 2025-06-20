@@ -15,36 +15,81 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
 import CharacterNetwork from "./CharacterNetwork";
+import { CharacterEncoding } from "crypto";
 
+// ts types mirroring modal 
 
-// Mock data for character list
-const mockCharacterData = [
-  { name: "Alice", count: 15, gender: "Female" },
-  { name: "The White Rabbit", count: 10, gender: "Male" },
-  { name: "The Queen of Hearts", count: 8, gender: "Female" },
-  { name: "The Mad Hatter", count: 12, gender: "Male" },
-  { name: "The Cheshire Cat", count: 9, gender: "Male" },
-];
+interface AnalysisRequestBody {
+  gutenberg_id: number;
+  analysis_type: string;
+}
+
+interface AnalysisResponseBody {
+  book_id: number;
+  characters: [string, number][];
+  error?: string;          
+}
+
+type Character = { name: string; count: string}
+
+// --- -- - - -- - - - - - - - 
+// react stuff 
 
 export function BookAnalyzer() {
-  const [bookUrl, setBookUrl] = useState(
-    ""
-  );
+  const [bookId, setBookId] = useState("");
   const [analysisMode, setAnalysisMode] = useState("spacy");
   const [isLoading, setIsLoading] = useState(false);
-  const [graphData, setGraphData] = useState({ nodes: [], links: [] });
   const [error, setError] = useState<string | null>(null);
   const [showResults, setShowResults] = useState(false);
+  const [characters, setCharacters] = useState<Character[]>(null);
+
+
 
   const handleAnalyze = async () => {
+
+    if (!bookId.trim()) return 
+
     setIsLoading(true);
     setError(null);
     setShowResults(false);
 
+    try {
+      
+      const body: AnalysisRequestBody = {
+        gutenberg_id: parseInt(bookId),
+        analysis_type: analysisMode
+      }
 
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+      const res = await fetch(
+        process.env.NEXT_PUBLIC_MODAL_ENDPOINT ?? 
+          "https://mhafez6--book-ner-analyze-book.modal.run",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }
+      );
 
-    setGraphData({ nodes: [], links: [] }); // Placeholder for graph
+      const data: AnalysisResponseBody = await res.json()
+
+      if (!res.ok || data.error){
+        throw new Error(data.error ?? `HTTP ${res.status}`)
+      }
+
+      const updatedData: Character[] = data.characters.map(
+        ([name , count]) => ({name, count})
+      )
+
+      setCharacters(updatedData)
+      setShowResults(true)
+
+    } catch (error) {
+      setError((error as Error).message)
+    } finally{
+      setIsLoading(false)
+    }
+
+    
     setShowResults(true);
     setIsLoading(false);
   };
@@ -64,8 +109,8 @@ export function BookAnalyzer() {
             <Input
               id="book-url"
               placeholder="1342 (Pride & Prejudice)"
-              value={bookUrl}
-              onChange={(e) => setBookUrl(e.target.value)}
+              value={bookId}
+              onChange={(e) => setBookId(e.target.value)}
             />
           </div>
           <div className="space-y-2">
@@ -90,7 +135,7 @@ export function BookAnalyzer() {
         <CardFooter>
           <Button
             onClick={handleAnalyze}
-            disabled={isLoading || !bookUrl}
+            disabled={isLoading || !bookId}
             className="w-full"
           >
             {isLoading ? "Analyzing..." : "Analyze Book"}
@@ -121,14 +166,13 @@ export function BookAnalyzer() {
               </CardHeader>
               <CardContent>
                 <ul className="space-y-2">
-                  {mockCharacterData.map((char) => (
+                  {characters.map((char) => (
                     <li
                       key={char.name}
                       className="flex items-center justify-between p-2 rounded-md hover:bg-muted"
                     >
                       <span className="font-medium">{char.name}</span>
                       <div className="flex items-center gap-4">
-                        <Badge variant="outline">{char.gender}</Badge>
                         <Badge variant="secondary">
                           Mentioned {char.count} times
                         </Badge>
@@ -146,7 +190,7 @@ export function BookAnalyzer() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <CharacterNetwork data={graphData} />
+                <CharacterNetwork  />
               </CardContent>
             </Card>
           </>
