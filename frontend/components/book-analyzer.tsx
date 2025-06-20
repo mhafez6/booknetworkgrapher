@@ -38,10 +38,8 @@ export interface AnalysisResponseBody {
   error?: string;
 }
 
-type Character = { name: string; count: number };
-type edges = {source: string; target: string; weight: number;}
-
-
+type graphNode = { name: string; count: number };
+type Edge = { source: string; target: string; weight: number };
 
 export function BookAnalyzer() {
   const [bookId, setBookId] = useState("");
@@ -49,7 +47,8 @@ export function BookAnalyzer() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showResults, setShowResults] = useState(false);
-  const [characters, setCharacters] = useState<Character[]>([]);
+  const [nodes, setNodes] = useState<graphNode[]>([]);
+  const [edges, setEdges] = useState<Edge[]>([]);
   const [showAll, setShowAll] = useState(false);
 
   const handleAnalyze = async () => {
@@ -81,20 +80,19 @@ export function BookAnalyzer() {
         throw new Error(data.error ?? `HTTP ${res.status}`);
       }
 
-      const resCharacters: Character[] = data.nodes.map(({name, count}) => ({
+      const resNode: graphNode[] = data.nodes.map(({ name, count }) => ({
         name,
         count,
       }));
 
-      const graph: edges[] = data.edges.map(({source, target, weight})=> ({
-        source, 
+      const resEdges: Edge[] = data.edges.map(({ source, target, weight }) => ({
+        source,
         target,
-        weight
-      }))
+        weight,
+      }));
 
-      
-
-      setCharacters(resCharacters);
+      setEdges(resEdges);
+      setNodes(resNode);
       setShowResults(true);
     } catch (error) {
       setError((error as Error).message);
@@ -168,8 +166,8 @@ export function BookAnalyzer() {
               </CardHeader>
               <CardContent>
                 <ul className="space-y-2">
-                  {(showAll ? characters : characters.slice(0, 5)).map(
-                    (char) => (
+                  {(showAll ? nodes : nodes.slice(0, 5)).map(
+                    (char: graphNode) => (
                       <li
                         key={char.name}
                         className="flex items-center justify-between p-2 rounded-md hover:bg-muted"
@@ -184,16 +182,14 @@ export function BookAnalyzer() {
                     )
                   )}
                 </ul>
-                {characters.length > 5 && (
+                {nodes.length > 5 && (
                   <div className="mt-4 text-center">
                     <Button
                       variant="ghost"
                       onClick={() => setShowAll(!showAll)}
                       className="text-sm"
                     >
-                      {showAll
-                        ? "Show Top 5"
-                        : `Show All (${characters.length})`}
+                      {showAll ? "Show Top 5" : `Show All (${nodes.length})`}
                     </Button>
                   </div>
                 )}
@@ -205,7 +201,7 @@ export function BookAnalyzer() {
                 <CardDescription></CardDescription>
               </CardHeader>
               <CardContent>
-                <CharacterNetwork />
+                <CharacterNetwork edges={edges} nodes={nodes} />
               </CardContent>
             </Card>
           </>
