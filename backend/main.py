@@ -5,6 +5,15 @@ import re
 import subprocess
 from collections import Counter, defaultdict
 from pathlib import Path
+from typing import Literal
+from pydantic import BaseModel
+
+
+# Pydantic types 
+
+class AnalysisRequest(BaseModel):
+    gutenberg_id: int
+    analysis_type: Literal["spacy", "llm"]
 
 # strip and remove copy right info 
 HDR = re.compile(r"\*\*\* *start of .*?project gutenberg ebook", re.I)
@@ -31,42 +40,37 @@ image = (
 
 app = modal.App("book-ner", image=image)
 
+# get book.txt
 def get_text(gutenberg_id: int):
     """Get book text from local file or download from Gutenberg."""
     
-    # Check for local copy of Pride and Prejudice
-    if gutenberg_id == 1342 and Path("pg11.txt").exists():
-        return core_text(Path("pg11.txt").read_text(encoding='utf-8'))
         
     # Download from Gutenberg
-    temp_file = f"gutenberg_{gutenberg_id}.txt"
     url = f"https://www.gutenberg.org/files/{gutenberg_id}/{gutenberg_id}-0.txt"
     
     try:
-        result = subprocess.run(
-            ["curl", "-L", "--max-time", "30", url, "-o", temp_file],
-            capture_output=True,
-            text=True
-        )
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
         
-        if result.returncode == 0:
-            text = Path(temp_file).read_text(encoding='utf-8')
-            if len(text) > 1000:
-                return core_text(text)
-                
+        text = response.text
+        if len(text) > 1000:
+            return core_text(text)
+            
         return {"error": f"Failed to download or validate book {gutenberg_id}"}
             
     except Exception as e:
         return {"error": str(e)}
 
+
+
 @app.function(gpu="A10", min_containers=1, timeout=600)
 def spacy_count(raw_text: str, book_id: int = 1324):
     """
-    A barebones function takes in a book and returns raw spaCy PERSON counts.
+    takes in a book and returns raw spaCy "PERSON" counts.
     """
-    print(f"\n=== Processing book {book_id} ===")
+    print(f"\nProcessing {book_id} ")
     print(f"Input text length: {len(raw_text)} characters")
-    print(f"First 100 chars: {raw_text[:100]}")
+
     
     # load spaCy
     import spacy
@@ -78,19 +82,22 @@ def spacy_count(raw_text: str, book_id: int = 1324):
     nlp = spacy.load("en_core_web_trf", disable=["tagger", "parser", "lemmatizer"])
     print("Model loaded successfully")
 
-    # Process text in blocks like strip.py does
-    blocks = [raw_text[i:i+25_000] for i in range(0, len(raw_text), 25_000)]
-    print(f"\nSplit text into {len(blocks)} blocks of ~25k chars each")
+    # strip texts to blocks of 25000 chars
+    blocks = [raw_text[i:i+25000] for i in range(0, len(raw_text), 25000)]
+    print(f"\nSplit text into {len(blocks)}")
     spans = []
     t0 = time.perf_counter()
     
     print("\nProcessing blocks through spaCy pipeline...")
+
     for i, doc in enumerate(nlp.pipe(blocks, batch_size=1024)):
         block_spans = [(ent.text, ent.start_char, ent.end_char)
                       for ent in doc.ents if ent.label_ == "PERSON"]
         spans += block_spans
         print(f"Block {i+1}/{len(blocks)}: Found {len(block_spans)} PERSON entities")
-                  
+
+    # each span has a tuple that has the entity person name, start indx, and end indx              
+    
     print(f"\nspaCy NER finished in {time.perf_counter() - t0:.2f}s.")
     print(f"Total PERSON mentions found: {len(spans)}")
     
@@ -102,14 +109,15 @@ def spacy_count(raw_text: str, book_id: int = 1324):
         print("\nWARNING: No PERSON entities found in the text!")
         print("This might indicate an issue with the text content or processing")
 
-    # count our person entities using the same approach as strip.py
-    buckets = defaultdict(set)
+    # count our person entities
+
+
     counts = Counter()
     
     for name, *_ in spans:
         name = name.strip()
         counts[name] += 1
-        buckets[name].add(name)
+
 
     # Sort results
     sorted_counts = sorted(counts.items(), key=lambda x: x[1], reverse=True)
@@ -125,8 +133,8 @@ def spacy_count(raw_text: str, book_id: int = 1324):
     # json payload we send back to frontend 
     return {
         "book_id": book_id,
-        "total_person_mentions": len(spans),
-        "unique_person_entities": len(sorted_counts),
+        # "total_person_mentions": len(spans),
+        # "unique_person_entities": len(sorted_counts),
         "characters": sorted_counts[:50]  # Return top 50 characters
     }
 
@@ -151,8 +159,8 @@ def count_interactions_llm(text):
 
 @app.local_entrypoint()
 def test():
-    book_id = 11  # Alice in Wonderland
-    print("\n=== Starting test with Alice in Wonderland (ID: 11) ===")
+    book_id = 37106  
+    print(f"\n=== Starting test  {book_id} ===")
     
     text = get_text(book_id)
     if isinstance(text, dict) and "error" in text:
@@ -165,12 +173,26 @@ def test():
     print(result)
 
 
-  
 
-
+@app.function()
 @modal.fastapi_endpoint(method="POST", docs=True)
-def main(data):
+def analyze_book(data: AnalysisRequest):
+    """
+    Analyze a book from Project Gutenberg using either spaCy or LLM approach.
+    """
+    try:
+        # Get the book text
+        text = get_text(data.gutenberg_id)
+        if isinstance(text, dict) and "error" in text:
+            return text
 
-    r = spacy_count.remote(data.gutenberg_id, data.type)
+        # Process based on analysis type
+        if data.analysis_type == "spacy":
+            return spacy_count.remote(text, data.gutenberg_id)
+        else:
+            return count_interactions_llm.remote(text, data.gutenberg_id)
+
+    except Exception as e:
+        return {"error": str(e)}
 
 
