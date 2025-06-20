@@ -9,6 +9,7 @@ from typing import Literal
 from pydantic import BaseModel
 import os
 from dotenv import load_dotenv
+from collections import deque
 
 # Load environment variables from .env file
 load_dotenv()
@@ -42,7 +43,7 @@ image = (
     .run_commands("python -m spacy download en_core_web_sm")
 )
 
-app = modal.App("book-ner", image=image)
+app = modal.App("copy-scapy-ner", image=image)
 
 # get book.txt
 def get_text(gutenberg_id: int):
@@ -119,24 +120,32 @@ def check_chars_with_llm(characters: list[tuple[str, int]], book_id: int):
 
     system_prompt = (
         "You are a literary expert. Given a list of names automatically extracted "
-        "from a novel, identify which items are *not* actual characters in the story. "
-        "Typical false positives include:\n"
-        "1. Publishing metadata (e.g., 'Project Gutenberg', 'Editor', etc.)\n"
-        "2. Chapter indicators or formatting ('Chapter', 'Volume', etc.)\n"
-        "3. Author names (unless they appear as characters)\n"
-        "4. Place names misidentified as people\n"
-        "5. Common words incorrectly tagged as names\n"
-        "6. Partial or incomplete name mentions\n\n"
-        "Return ONLY a JSON array of [name, count] pairs for REAL characters."
+        "from a novel, identify which items are *not* actual characters in the story "
+        "and consolidate different variations of the same character's name. "
+        "Your tasks:\n\n"
+        "1. Remove non-character entries like:\n"
+        "   - Publishing metadata (e.g., 'Project Gutenberg', 'Editor')\n"
+        "   - Chapter indicators or formatting\n"
+        "   - Author names (unless they appear as characters)\n"
+        "   - Place names misidentified as people\n"
+        "   - Common words incorrectly tagged as names\n"
+        "   - Partial or incomplete name mentions\n\n"
+        "2. Consolidate name variations:\n"
+        "   - Combine full names with partial mentions (e.g., 'Dorian Gray' + 'Dorian')\n"
+        "   - Add counts together for the same character\n"
+        "   - Use the most complete/formal version of the name as the key\n"
+        "   - Consider context and character relationships\n\n"
+        "Return ONLY a JSON object where keys are the consolidated character names "
+        "and values are the total mention counts."
     )
 
     user_prompt = (
         f"Book title: {title}\n"
         f"Author: {author}\n\n"
-        "Here is the extracted list (name: mention_count). Remove any entries that are "
-        "not real character names. Return *only* a JSON array of 2-item arrays where "
-        "each inner array is [name, count]. Do not wrap it in markdown, do not add "
-        "any other keys.\n\n" + char_list_str
+        "Here is the extracted list (name: mention_count). Remove non-character entries "
+        "and consolidate different variations of the same character's name. Sum the counts "
+        "for variations of the same character. Return a JSON object where keys are character "
+        "names (use the most complete version) and values are total counts.\n\n" + char_list_str
     )
 
     try:
@@ -190,6 +199,7 @@ def spacy_count(raw_text: str, book_id: int = 1324):
     """
     takes in a book and returns raw spaCy "PERSON" counts.
     Using lighter model and optimized processing.
+    also returns pairs of "interactoins"
     """
     print(f"\nProcessing {book_id} ")
     print(f"Input text length: {len(raw_text)} characters")
@@ -198,37 +208,93 @@ def spacy_count(raw_text: str, book_id: int = 1324):
     import spacy
     print("\nInitializing spaCy...")
     # Use smaller CPU-optimized model
-    nlp = spacy.load("en_core_web_sm")
+    nlp = spacy.load("en_core_web_sm", disable=["tagger", "parser", "attribute_ruler", "lemmatizer"])
+    nlp.add_pipe("sentencizer")
+
+
+
     print("Model loaded successfully")
 
-
+    
     blocks = [raw_text[i:i+50000] for i in range(0, len(raw_text), 50000)]
     print(f"\nSplit text into {len(blocks)} blocks")
     
-    spans = []
+    # spans = []
     t0 = time.perf_counter()
+
     
     print("\nProcessing blocks through spaCy pipeline...")
 
 
+
+    # for i, doc in enumerate(nlp.pipe(blocks, batch_size=2048)):
+    #     block_spans = [(ent.text, ent.start_char, ent.end_char)
+    #                   for ent in doc.ents if ent.label_ == "PERSON"]
+    #     spans += block_spans
+    #     print(f"Block {i+1}/{len(blocks)}: Found {len(block_spans)} PERSON entities")
+
+    mention_counter: Counter[str] = Counter()
+    pair_counter = defaultdict(lambda: defaultdict(int))
+    
+    # we create two counters for each of pairs and overall number of mentions
+    
+    from collections import deque
+    window_size = 4  # number of consecutive sentences to consider as context 
+    
     for i, doc in enumerate(nlp.pipe(blocks, batch_size=2048)):
-        block_spans = [(ent.text, ent.start_char, ent.end_char)
-                      for ent in doc.ents if ent.label_ == "PERSON"]
-        spans += block_spans
-        print(f"Block {i+1}/{len(blocks)}: Found {len(block_spans)} PERSON entities")
+        # Keep a small deque for the sliding sentence window inside this block
+        sent_window: deque[set[str]] = deque(maxlen=window_size)
+
+        for ent in doc.ents:
+            if ent.label_ == "PERSON":
+                mention_counter[ent.text.strip()] += 1
+
+        for sent in doc.sents:
+            names = {e.text.strip() for e in sent.ents if e.label_ == "PERSON"}
+            sent_window.append(names)
+
+            # Combine names across the current window
+            union_names: set[str] = set().union(*sent_window)
+
+            if len(union_names) > 1:
+                for n1 in union_names:
+                    for n2 in union_names:
+                        if n1 < n2:
+                            pair_counter[n1][n2] += 1
+                            pair_counter[n2][n1] += 1
+        
+    
+
+
+
+    
               
     print(f"\nspaCy NER finished in {time.perf_counter() - t0:.2f}s.")
-    print(f"Total PERSON mentions found: {len(spans)}")
 
 
-    counts = Counter(name.strip() for name, *_ in spans)
-    sorted_counts = sorted(counts.items(), key=lambda x: x[1], reverse=True)
 
-    print(f"\nFound {len(sorted_counts)} unique characters")
     
+    sorted_mentions = sorted(mention_counter.items(), key=lambda x: x[1], reverse=True)
+    # Convert nested defaultdict to list of ((char1, char2), count) tuples
+    pairs = []
+    for char1, interactions in pair_counter.items():
+        for char2, count in interactions.items():
+            if char1 < char2:  # Only add each pair once
+                pairs.append(((char1, char2), count))
+    sorted_pairs = sorted(pairs, key=lambda x: x[1], reverse=True)
+
+    print(f"\nFound {len(sorted_mentions)} unique characters")
+    print(f"\nFound {len(pairs)} unique pairs or interactions")
+    
+    # Display top character interactions
+    print("\nTop 5 character interactions:")
+    for (char1, char2), count in sorted_pairs[:5]:
+        print(f"  - {char1} ↔ {char2}: {count} interactions")
+
     return {
         "book_id": book_id,
-        "characters": sorted_counts[:15]
+        "characters": sorted_mentions[:15], 
+        "pairs": sorted_pairs[:200]
     }
 
 
@@ -254,7 +320,7 @@ def count_interactions_llm(text):
 
 @app.local_entrypoint()
 def test():
-    book_id = 174
+    book_id = 1342
     print(f"\n=== Starting test  {book_id} ===")
     
     text = get_text(book_id)

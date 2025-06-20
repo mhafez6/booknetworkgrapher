@@ -16,6 +16,7 @@ And I'll use my inital approach on a small subset of the book.
 plan for 20 june 
 
 1. create frontend mock up and set up calls to the fast api endpoint with two versions, spacy or llm 
+done 
 
 2. have the spacy version fully working with a simple graph visualizer working 
 
