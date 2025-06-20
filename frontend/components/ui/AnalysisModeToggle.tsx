@@ -31,8 +31,9 @@ const AnalysisModeToggle: React.FC<AnalysisModeToggleProps> = ({
     {
       id: "spacy",
       label: "spaCy NER",
-      description: "Named Entity Recognition model that counts character occurences over whole book. Innacurate to some extent with differentiating nicknames.",
+      description: "Named Entity Recognition model that counts character occurences over whole book. ",
       icon: <Zap className="w-5 h-5" />,
+      badge: "Possible innaccuracies "
     },
   ],
 }) => {
