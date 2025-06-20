@@ -12,9 +12,9 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Badge } from "@/components/ui/badge";
 import CharacterNetwork from "./CharacterNetwork";
+import AnalysisModeToggle from "@/components/ui/AnalysisModeToggle";
 // import BookMetadata from "./BookMetadata";
 
 // ts types mirroring modal
@@ -37,7 +37,7 @@ type Character = { name: string; count: number };
 
 export function BookAnalyzer() {
   const [bookId, setBookId] = useState("");
-  const [analysisMode, setAnalysisMode] = useState("spacy");
+  const [analysisMode, setAnalysisMode] = useState("llm");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showResults, setShowResults] = useState(false);
@@ -59,7 +59,7 @@ export function BookAnalyzer() {
 
       const res = await fetch(
         process.env.NEXT_PUBLIC_MODAL_ENDPOINT ??
-          "https://mhafez6--book-ner-analyze-book.modal.run",
+          "https://mhafez6--llm-idea-analyze-book.modal.run",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -92,52 +92,42 @@ export function BookAnalyzer() {
 
   return (
     <div className="w-full max-w-4xl mx-auto space-y-8">
-      <Card>
-        <CardHeader>
-          <CardTitle>Analysis Configuration</CardTitle>
-          <CardDescription>
-            Enter a gutenberg ID and choose an analysis method.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="book-url">Project Gutenberg Book Id</Label>
-            <Input
-              id="book-url"
-              placeholder="1342 (Pride & Prejudice)"
-              value={bookId}
-              onChange={(e) => setBookId(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Analysis Mode</Label>
-            <RadioGroup
-              defaultValue="spacy"
-              className="flex items-center space-x-4"
-              value={analysisMode}
-              onValueChange={setAnalysisMode}
+      <div className="relative">
+        <Card>
+          <CardHeader>
+            <CardTitle>Analysis Configuration</CardTitle>
+            <CardDescription>
+              Enter a gutenberg ID and choose an analysis method.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="book-url">Project Gutenberg Book Id</Label>
+              <Input
+                id="book-url"
+                placeholder="1342 (Pride & Prejudice)"
+                value={bookId}
+                onChange={(e) => setBookId(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <AnalysisModeToggle
+                selectedMode={analysisMode}
+                onModeChange={setAnalysisMode}
+              />
+            </div>
+          </CardContent>
+          <CardFooter>
+            <Button
+              onClick={handleAnalyze}
+              disabled={isLoading || !bookId}
+              className="w-full"
             >
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="spacy" id="spacy" />
-                <Label htmlFor="spacy">spaCy (Fast)</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="llm" id="llm" />
-                <Label htmlFor="llm">LLM (Deep)</Label>
-              </div>
-            </RadioGroup>
-          </div>
-        </CardContent>
-        <CardFooter>
-          <Button
-            onClick={handleAnalyze}
-            disabled={isLoading || !bookId}
-            className="w-full"
-          >
-            {isLoading ? "Analyzing..." : "Analyze Book"}
-          </Button>
-        </CardFooter>
-      </Card>
+              {isLoading ? "Analyzing..." : "Analyze Book"}
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
 
       {error && (
         <Card className="bg-destructive text-destructive-foreground">
@@ -197,7 +187,7 @@ export function BookAnalyzer() {
               <CardHeader>
                 <CardTitle>Character Network Graph</CardTitle>
                 <CardDescription>
-                  A visual representation of character interactions.
+
                 </CardDescription>
               </CardHeader>
               <CardContent>
