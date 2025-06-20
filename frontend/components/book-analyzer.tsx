@@ -24,16 +24,24 @@ interface AnalysisRequestBody {
   analysis_type: string;
 }
 
-interface AnalysisResponseBody {
+export interface AnalysisResponseBody {
   book_id: number;
-  characters: [string, number][];
+  nodes: {
+    name: string;
+    count: number;
+  }[];
+  edges: {
+    source: string;
+    target: string;
+    weight: number;
+  }[];
   error?: string;
 }
 
 type Character = { name: string; count: number };
+type edges = {source: string; target: string; weight: number;}
 
-// --- -- - - -- - - - - - - -
-// react stuff
+
 
 export function BookAnalyzer() {
   const [bookId, setBookId] = useState("");
@@ -73,12 +81,20 @@ export function BookAnalyzer() {
         throw new Error(data.error ?? `HTTP ${res.status}`);
       }
 
-      const updatedData: Character[] = data.characters.map(([name, count]) => ({
+      const resCharacters: Character[] = data.nodes.map(({name, count}) => ({
         name,
         count,
       }));
 
-      setCharacters(updatedData);
+      const graph: edges[] = data.edges.map(({source, target, weight})=> ({
+        source, 
+        target,
+        weight
+      }))
+
+      
+
+      setCharacters(resCharacters);
       setShowResults(true);
     } catch (error) {
       setError((error as Error).message);
@@ -186,9 +202,7 @@ export function BookAnalyzer() {
             <Card>
               <CardHeader>
                 <CardTitle>Character Network Graph</CardTitle>
-                <CardDescription>
-
-                </CardDescription>
+                <CardDescription></CardDescription>
               </CardHeader>
               <CardContent>
                 <CharacterNetwork />
