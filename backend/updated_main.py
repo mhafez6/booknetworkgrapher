@@ -38,7 +38,7 @@ app = modal.App("llm_idea", image=image)
 
 class AnalysisRequest(BaseModel):
     gutenberg_id: int
-    analysis_type: Literal["spacy", "llm"]
+    analysis_type: Literal["spacy", "llm", "metadata"]
 
 
 # remove the headers 
@@ -359,6 +359,10 @@ def spacy_count(raw_text: str, book_id: int = 1324):
 @app.function()
 @modal.fastapi_endpoint(method="POST", docs=True)
 def analyze_book(req: AnalysisRequest):
+
+    if req.analysis_type == "metadata":
+        return get_meta_data(req.gutenberg_id)
+    
     txt = get_text(req.gutenberg_id)
     if isinstance(txt, dict) and "error" in txt:
         return txt

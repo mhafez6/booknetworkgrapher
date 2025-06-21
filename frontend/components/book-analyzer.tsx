@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -15,13 +15,19 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import CharacterNetwork from "./CharacterNetwork";
 import AnalysisModeToggle from "@/components/ui/AnalysisModeToggle";
-// import BookMetadata from "./BookMetadata";
+import { toast } from "sonner";
 
 // ts types mirroring modal
 
 interface AnalysisRequestBody {
   gutenberg_id: number;
   analysis_type: string;
+}
+
+export interface Metadata {
+  Author: string;
+  Title?: string;
+  error?: string;
 }
 
 export interface AnalysisResponseBody {
@@ -41,7 +47,6 @@ export interface AnalysisResponseBody {
 type graphNode = { name: string; count: number };
 type Edge = { source: string; target: string; weight: number };
 
-
 export function BookAnalyzer() {
   const [bookId, setBookId] = useState("");
   const [analysisMode, setAnalysisMode] = useState("llm");
@@ -51,6 +56,55 @@ export function BookAnalyzer() {
   const [nodes, setNodes] = useState<graphNode[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [showAll, setShowAll] = useState(false);
+
+  const [metaDataa, setMetaDataa] = useState<Metadata>();
+  const [isLoadingMetaData, setIsLoadingMetaData] = useState(false);
+
+  // show toast of meta data
+  useEffect(() => {
+    if (metaDataa) {
+      toast(metaDataa.Title || "Unknown Title", {
+        position: "top-center",
+        duration: 4000,
+      });
+    }
+  }, [metaDataa]);
+
+  const getMetaData = async () => {
+    if (!bookId.trim()) return;
+
+    setIsLoadingMetaData(true);
+    setError(null);
+
+    try {
+      const body: AnalysisRequestBody = {
+        gutenberg_id: parseInt(bookId),
+        analysis_type: "metadata",
+      };
+
+      const r = await fetch(
+        process.env.NEXT_PUBLIC_MODAL_ENDPOINT ??
+          "https://mhafez6--llm-idea-analyze-book.modal.run",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }
+      );
+
+      const data: Metadata = await r.json();
+
+      if (!r.ok || data.error) {
+        throw new Error(data.error ?? `HTTP ${r.status}`);
+      }
+
+      setMetaDataa(data);
+    } catch (error) {
+      setError((error as Error).message);
+    } finally {
+      setIsLoadingMetaData(false);
+    }
+  };
 
   const handleAnalyze = async () => {
     if (!bookId.trim()) return;
@@ -132,13 +186,21 @@ export function BookAnalyzer() {
               />
             </div>
           </CardContent>
-          <CardFooter>
+          <CardFooter className="flex flex-col sm:flex-row gap-2">
             <Button
               onClick={handleAnalyze}
               disabled={isLoading || !bookId}
-              className="w-full"
+              className="flex-1"
             >
               {isLoading ? "Analyzing..." : "Analyze Book"}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={getMetaData}
+              disabled={isLoadingMetaData || !bookId}
+              className="flex-1"
+            >
+              {isLoadingMetaData ? "Fetching..." : "Get Meta Data"}
             </Button>
           </CardFooter>
         </Card>
