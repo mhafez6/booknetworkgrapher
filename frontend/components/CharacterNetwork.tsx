@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import * as d3 from "d3";
 
 
-interface Props {
+export interface Props {
   nodes: { name: string; count: number }[];
   edges: { source: string; target: string; weight: number }[];
 }

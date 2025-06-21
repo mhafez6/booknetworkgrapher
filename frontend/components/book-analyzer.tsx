@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import CharacterNetwork from "./CharacterNetwork";
 import AnalysisModeToggle from "@/components/ui/AnalysisModeToggle";
 import { toast } from "sonner";
+import InteractionList from "./InteractionList";
 
 // ts types mirroring modal
 
@@ -277,7 +278,10 @@ export function BookAnalyzer() {
             </CardContent>
           </Card>
         )}
-        {/* {showResults && <BookMetadata bookId={Number(bookId)} />} */}
+
+        {showResults ? (<>
+        <InteractionList edges={edges} nodes={nodes} />
+        </>) : (<></>)}
       </div>
     </div>
   );
