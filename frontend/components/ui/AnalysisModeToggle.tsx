@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Brain, Zap } from 'lucide-react';
+import { Brain, Zap, LucideIcon } from 'lucide-react';
 
 interface AnalysisMode {
     id: string;
     label: string;
     description: string;
-    icon: React.ReactElement;
+    icon: LucideIcon;
     badge?: string;
 }
 
@@ -26,7 +26,7 @@ const AnalysisModeToggle: React.FC<AnalysisModeToggleProps> = ({
             label: 'LLM',
             description:
                 'Weighted network graph of character interactions over a subset of the book.',
-            icon: <Brain className="w-5 h-5" />,
+            icon: Brain,
             badge: 'Recommended',
         },
         {
@@ -34,7 +34,7 @@ const AnalysisModeToggle: React.FC<AnalysisModeToggleProps> = ({
             label: 'spaCy NER',
             description:
                 'Named Entity Recognition model that counts character occurences over whole book. ',
-            icon: <Zap className="w-5 h-5" />,
+            icon: Zap,
             badge: 'Possible innaccuracies ',
         },
     ],
@@ -69,9 +69,15 @@ const AnalysisModeToggle: React.FC<AnalysisModeToggleProps> = ({
                                                 : 'bg-muted text-muted-foreground'
                                         }`}
                                     >
-                                        {React.cloneElement(mode.icon, {
-                                            className: 'w-4 h-4',
-                                        })}
+                                        <div
+                                            className={`p-1.5 rounded-lg ${
+                                                selected === mode.id
+                                                    ? 'bg-primary text-primary-foreground'
+                                                    : 'bg-muted text-muted-foreground'
+                                            }`}
+                                        >
+                                            <mode.icon className="w-4 h-4" />
+                                        </div>
                                     </div>
                                     <div>
                                         <h3 className="font-semibold text-sm text-foreground">
