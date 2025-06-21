@@ -21,7 +21,8 @@ MAX_EXCERPT_CHARS = 15000
 CHUNK_CHARS = 2200
 OVERLAP_CHARS = 200
 SKIP = 0.05      
-MAX_CHUNKS = 5
+
+
 
 MODEL = "gpt-4o-mini"
 
@@ -39,6 +40,7 @@ app = modal.App("llm_idea", image=image)
 class AnalysisRequest(BaseModel):
     gutenberg_id: int
     analysis_type: Literal["spacy", "llm", "metadata"]
+    max_chunks: int = 5
 
 
 # remove the headers 
@@ -74,9 +76,9 @@ def take_excerpt(txt: str) -> str:
     return txt[start: start + 90000]
 
 
-def make_chunks(text: str) -> list[str]:
-
-    n = min(MAX_CHUNKS, max(1, round(len(text) / CHUNK_CHARS))) 
+def make_chunks(text: str, max_chunks: int = 5) -> list[str]:
+    
+    n = min(max_chunks, max(1, round(len(text) / CHUNK_CHARS))) 
     span = len(text) // n
     out = []
 
@@ -232,13 +234,13 @@ def merge(results: list[str]):
 
 
 @app.function(secrets=[secret_apis], timeout=600)
-def count_interactions_llm(text: str, book_id: int):
+def count_interactions_llm(text: str, book_id: int, max_chunks: int = 5):
     meta   = get_meta_data(book_id)
     title  = meta.get("Title", f"Gutenberg #{book_id}")
     author = meta.get("Author", "Unknown")
 
     excerpt = take_excerpt(text)
-    chunks  = make_chunks(excerpt)
+    chunks  = make_chunks(excerpt, max_chunks)
     sys_prompt = build_system_prompt(title, author)
 
     results = [analyse_chunk(ch, sys_prompt) for ch in chunks]
@@ -370,7 +372,7 @@ def analyze_book(req: AnalysisRequest):
     if req.analysis_type == "spacy":
         return spacy_count.remote(txt, req.gutenberg_id)
 
-    return count_interactions_llm.remote(txt, req.gutenberg_id)
+    return count_interactions_llm.remote(txt, req.gutenberg_id, req.max_chunks)
 
 
 @app.local_entrypoint()
